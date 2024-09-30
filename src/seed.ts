@@ -20,7 +20,7 @@ function generateData(): Partial<ITask>[] {
 function createRandomTask(): Partial<ITask> {
   const userID = faker.string.uuid();
   return {
-    id: userID,
+    // id: userID,
     title: faker.lorem.words(5),
     description: faker.lorem.words(10),
     assignedTo: [userID],
@@ -32,17 +32,19 @@ function createRandomTask(): Partial<ITask> {
 const fakeData = generateData();
 
 //Generera testdata
-await Task.insertMany(fakeData)
-  .then(() => {
-    console.log("Succesfully saved products");
-    mongoose.connection.close();
-    process.exit(0);
-  })
-  .catch((err: Error) => console.log(err));
+// await Task.insertMany(fakeData)
+//   .then(() => {
+//     console.log("Succesfully saved products");
+//     mongoose.connection.close();
+//     process.exit(0);
+//   })
+//   .catch((err: Error) => console.log(err));
 
 //Ta bort testdata
-// await Product.deleteMany({}).then(() => {
+// await Task.deleteMany({})
+//   .then(() => {
 //     console.log("Succesfully removed all products");
 //     mongoose.connection.close();
 //     process.exit(0);
-// }).catch((err) => console.log(err));
+//   })
+//   .catch((err) => console.log(err));

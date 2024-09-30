@@ -81,23 +81,3 @@ export const registerBodyValidation = () =>
     },
     ["body"]
   );
-
-export const createProjectBodyValidation = () => {
-  return checkSchema(
-    {
-      title: {
-        notEmpty: true,
-        isEmpty: {
-          errorMessage: "Title cannot be empty",
-        },
-        isLength: {
-          options: {
-            min: 2,
-          },
-          errorMessage: "Title must have more than 2 characters",
-        },
-      },
-    },
-    ["body"]
-  );
-};
