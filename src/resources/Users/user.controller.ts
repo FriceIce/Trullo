@@ -1,57 +1,63 @@
-import { Request, Response } from "express";
-import { User } from "../../models/models.ts";
-import { IUser } from "../../types.ts";
 import bcrypt from "bcrypt";
+import "dotenv/config";
+import { NextFunction, Request, Response } from "express";
+import { validationResult } from "express-validator";
+import jwt from "jsonwebtoken";
+import { User } from "../../models/models.ts";
 import validateRequestBody from "../../modules/validateReqBody.ts";
+import { IUser } from "../../types.ts";
+import generalCatchErrorMsg from "../../modules/basicErrorMsg.ts";
 
 /** 
   @description - create user
-  @route - POST /registerUser/
+  @route - POST /api/registerUser/
 */
 
-export const registerUser = async (req: Request, res: Response) => {
+export const registerUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   const body: IUser = req.body;
   console.log(req.body);
-  const { username, email, password } = body;
+  const { username, email, password, secretKey } = body;
 
-  if (!username || !email || !password) {
-    return res.status(400).json({ message: "All fields are required" });
-  }
+  // epxress validator
+  const result = validationResult(body);
+
+  if (!result.isEmpty())
+    return res.status(400).json({ errors: result.array() });
 
   try {
     const saltRounds = 10;
+
+    // If bcrypt.hash throws an error, try catch will "catch" it and return error message
     const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedSecretKey = await bcrypt.hash(secretKey, saltRounds);
 
-    if (!hashedPassword)
-      return res.status(500).json({ message: "Unable to hash password" });
-
-    await User.create({
+    const createUser = await User.create({
       username: username.toLocaleLowerCase(),
       email: email.toLocaleLowerCase(),
       password: hashedPassword,
-    })
-      .then((user) => {
-        return res.status(200).json({
-          status: 200,
-          message: "User created successfully",
-          data: user,
-        });
-      })
-      .catch((error) => {
-        console.log(error);
-        res
-          .status(500)
-          .json({ status: 500, message: "Unable to create user." });
-      });
+      secretKey: hashedSecretKey,
+    });
+
+    if (!createUser) {
+      return res
+        .status(500)
+        .json({ status: 500, message: "Unable to create user." });
+    }
+
+    console.log("User created successfully");
+    next(); // next ---> logInUser
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ status: 500, message: "Server side error" });
+    generalCatchErrorMsg(res, error);
   }
 };
 
 /** 
   @description get specific user/users --> output: [user1, user2, user3]
-  @route - POST /getUsers/
+  @route - POST /api/getUsers/
 */
 
 export const getUsers = async (req: Request, res: Response) => {
@@ -70,19 +76,19 @@ export const getUsers = async (req: Request, res: Response) => {
       data: users,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ status: 500, message: "Server side error" });
+    generalCatchErrorMsg(res, error);
   }
 };
 
 /** 
   @description - log in user
-  @route - POST /logInUser/
+  @route - POST /api/logInUser/
 */
 
 export const logInUser = async (req: Request, res: Response) => {
+  const token_secret = process.env.JWT_SECRET;
   const body: IUser = req.body;
-  const { email, password } = body;
+  const { username, email, password } = body; // If the username is defined, it means that the code came from the register function.
 
   if (!email || !password) {
     return res.status(400).json({ message: "Email and password are required" });
@@ -99,22 +105,41 @@ export const logInUser = async (req: Request, res: Response) => {
     const isCorrectPassword = await bcrypt.compare(password, user.password); // boolean
 
     if (!isCorrectPassword)
-      return res.status(400).json({ message: "Incorrect password." });
+      return res
+        .status(400)
+        .json({ status: 400, message: "Incorrect password." });
+
+    if (!token_secret)
+      return res
+        .status(500)
+        .json({ status: 500, message: "Unable to create token" });
+
+    // Initialize token and give the jwt token a role.
+    const token = jwt.sign({ id: user.id, role: user.role }, token_secret, {
+      expiresIn: "1h",
+    });
+    const responseData = {
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      access_token: token,
+    };
 
     return res.status(200).json({
       status: 200,
-      message: "User logged in successfully",
-      data: user,
+      message: username
+        ? "The user has been successfully registered and logged in"
+        : "user logged in successfully.",
+      data: responseData,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ status: 500, message: "Server side error" });
+    generalCatchErrorMsg(res, error);
   }
 };
 
 /** 
   @description delete user
-  @route - delete /deleteUser/:id
+  @route - delete /api/deleteUser/:id
 */
 
 export const deleteUser = async (req: Request, res: Response) => {
@@ -133,44 +158,49 @@ export const deleteUser = async (req: Request, res: Response) => {
       .status(200)
       .json({ status: 200, message: "User deleted successfully" });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ status: 500, message: "Server side error" });
+    generalCatchErrorMsg(res, error);
   }
 };
 
 /** 
-  @description - update user information
-  @route - PUT / updateUser/:id
+  @description - update user information. This route is ONLY for admins. 
+  @route - PUT /api/updateUser/:id
 */
 
 export const updateUser = async (req: Request, res: Response) => {
   const { id } = req.params;
   const body: IUser = req.body;
-  const { username, email, password, ...rest } = body;
+  const { username, email, password, role, ...rest } = body;
 
   const bodyIsNotValid = validateRequestBody(
     res,
-    ["username", "email", "password"],
+    ["username", "email", "password", "role"],
     rest
   );
 
   if (bodyIsNotValid) return bodyIsNotValid;
 
   try {
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password ?? "", saltRounds);
+    const user = await User.findById(id);
 
-    const user = await User.findByIdAndUpdate(
+    if (!user) {
+      return res
+        .status(500)
+        .json({ status: 500, message: "Server side error" });
+    }
+
+    //update user.
+    const updateUser = await User.findByIdAndUpdate(
       id,
       {
-        username: username.toLowerCase(),
-        email: email.toLocaleLowerCase(),
-        password: password ? hashedPassword : undefined,
+        username: username ? username.toLowerCase() : user.username,
+        email: email ? email.toLocaleLowerCase() : user.email,
+        role: role ? role.toLocaleLowerCase() : user.role,
       },
       { new: true }
     );
 
-    if (!user)
+    if (!updateUser)
       return res.status(400).json({
         status: 400,
         message: "Bad request. There is no user with id: " + id,
@@ -178,11 +208,80 @@ export const updateUser = async (req: Request, res: Response) => {
 
     return res
       .status(200)
-      .json({ status: 200, message: "User updated successfully", data: user })
+      .json({
+        status: 200,
+        message: "User updated successfully",
+        data: {
+          username: updateUser.username,
+          email: updateUser.email,
+          role: updateUser.role,
+        },
+      })
       .status(200)
       .json({ status: 200, message: "User updated successfully" });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ status: 500, message: "Server side error" });
+  }
+};
+
+/** 
+  @description - This route is used for password reset and requires the secret key to match the user's secret key for the process to complete successfully. 
+  @route PUT - /api/resetPassword/:id
+*/
+
+export const resetPassword = async (req: Request, res: Response) => {
+  const body: { newPassword: string; secretKey: string } = req.body;
+  const { newPassword, secretKey } = body;
+  const { id } = req.params;
+
+  const result = validationResult(body);
+
+  if (!result.isEmpty()) {
+    return res.status(400).json({ errors: result.array() });
+  }
+
+  try {
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(400).json({
+        status: 400,
+        message: "Bad request, there is no user with id " + id,
+      });
+    }
+
+    const unHashSecretKey = await bcrypt.compare(secretKey, user.secretKey);
+
+    if (!unHashSecretKey) {
+      return res.status(400).json({
+        status: 400,
+        message: "Bad request, secret key does not match.",
+      });
+    }
+
+    // hashing new password if secret key match
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    const updateUserPassword = await User.findByIdAndUpdate(id, {
+      password: hashedPassword,
+    });
+
+    if (!updateUserPassword) {
+      return res
+        .status(500)
+        .json({ status: 500, message: "Unable to update user password" });
+    }
+
+    // If password updated successfully
+    return res
+      .status(200)
+      .json({ status: 200, message: "Password updated successfully" });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ status: 500, message: "Server side error.", error });
   }
 };
