@@ -6,6 +6,7 @@ export interface IUser {
   password: string;
   secretKey: string;
   role: "admin" | "user";
+  projects?: Types.ObjectId[];
 }
 
 export interface ITask {

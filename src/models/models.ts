@@ -7,6 +7,7 @@ const userSchema = new Schema<IUser, Model<IUser>>({
   password: { type: String, required: true },
   secretKey: { type: String, required: true },
   role: { type: String, enum: ["admin", "user"], default: "user" },
+  projects: { type: [String], ref: "Project", default: [] },
 });
 
 const taskSchema = new Schema<ITask, Model<ITask>>({
@@ -17,7 +18,7 @@ const taskSchema = new Schema<ITask, Model<ITask>>({
     enum: ["to-do", "in-progress", "done", "blocked"],
     default: "to-do",
   },
-  assignedTo: [String],
+  assignedTo: { type: [String], ref: "User", default: [] },
   createdAt: { type: Date, default: Date.now },
   finishedBy: { type: String, default: "Not finished." },
   project: { type: Schema.Types.ObjectId, ref: "Project", required: true },
