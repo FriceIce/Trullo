@@ -6,7 +6,8 @@ import jwt from "jsonwebtoken";
 import { User } from "../../models/models.ts";
 import validateRequestBody from "../../modules/validateReqBody.ts";
 import { IUser } from "../../types.ts";
-import generalCatchErrorMsg from "../../modules/basicErrorMsg.ts";
+import catchErrorMsg from "../../Error/basicErrorMsg.ts";
+import { AuthenticatedRequest } from "../../middleware/auth.ts";
 
 /** 
   @description - create user
@@ -51,32 +52,34 @@ export const registerUser = async (
     console.log("User created successfully");
     next(); // next ---> logInUser
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
 /** 
-  @description get specific user/users --> output: [user1, user2, user3]
-  @route - POST /api/getUsers/
+  @description Get the current user. This function checks the JWT payload for the user ID and uses it to retrieve the current user's information. 
+  @route - POST /api/currentUser/
 */
 
-export const getUsers = async (req: Request, res: Response) => {
-  const { ids } = req.body;
-  console.log(req.body);
-  if (!ids) {
-    return res.status(400).json({ message: "IDs are required" });
-  }
+export const getUser = async (req: AuthenticatedRequest, res: Response) => {
+  if (!req.user) return console.log(req.user);
 
   try {
-    const users = await User.find({ _id: { $in: ids } });
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res
+        .status(500)
+        .json({ status: 500, message: "Server side error" });
+    }
 
     return res.status(200).json({
       status: 200,
       message: "Users retrieved successfully",
-      data: users,
+      data: user,
     });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
@@ -133,17 +136,21 @@ export const logInUser = async (req: Request, res: Response) => {
       data: responseData,
     });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
 /** 
-  @description delete user
-  @route - delete /api/deleteUser/:id
+  @description This function deletes the current user. This route is for both user and admins. 
+  @route - delete /api/deleteCurrentUser/
 */
 
-export const deleteUser = async (req: Request, res: Response) => {
-  const { id } = req.params;
+export const deleteCurrentUser = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  if (!req.user) return console.log(req.user);
+  const id: string = req.user.id;
 
   try {
     const user = await User.findByIdAndDelete(id);
@@ -158,7 +165,7 @@ export const deleteUser = async (req: Request, res: Response) => {
       .status(200)
       .json({ status: 200, message: "User deleted successfully" });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
@@ -230,10 +237,16 @@ export const updateUser = async (req: Request, res: Response) => {
   @route PUT - /api/resetPassword/:id
 */
 
-export const resetPassword = async (req: Request, res: Response) => {
-  const body: { newPassword: string; secretKey: string } = req.body;
-  const { newPassword, secretKey } = body;
-  const { id } = req.params;
+export const resetPassword = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  if (!req.user) return console.log(req.user);
+
+  const id: string = req.user.id;
+  const body: { newPassword: string; secretKey: string; email: string } =
+    req.body;
+  const { newPassword, secretKey, email } = body;
 
   const result = validationResult(body);
 
@@ -245,9 +258,9 @@ export const resetPassword = async (req: Request, res: Response) => {
     const user = await User.findById(id);
 
     if (!user) {
-      return res.status(400).json({
-        status: 400,
-        message: "Bad request, there is no user with id " + id,
+      return res.status(500).json({
+        status: 500,
+        message: "Server side error",
       });
     }
 
@@ -258,6 +271,12 @@ export const resetPassword = async (req: Request, res: Response) => {
         status: 400,
         message: "Bad request, secret key does not match.",
       });
+    }
+
+    if (email.toLocaleLowerCase() !== user.email.toLocaleLowerCase()) {
+      return res
+        .status(400)
+        .json({ status: 404, message: "The email does not match." });
     }
 
     // hashing new password if secret key match

@@ -3,10 +3,10 @@ import { Project, Task } from "../../models/models.ts";
 import { IProject, ITask } from "../../types.ts";
 import validateRequestBody from "../../modules/validateReqBody.ts";
 import { Types } from "mongoose";
-import generalCatchErrorMsg from "../../modules/basicErrorMsg.ts";
+import catchErrorMsg from "../../Error/basicErrorMsg.ts";
 
 /**  
-  @description - Create a new task. Title and description are required.
+  @description - Create a new task. Title and description are required in the request body.
   @route - POST /api/createTask/:id
 */
 
@@ -50,13 +50,13 @@ export const createTask = async (req: Request, res: Response) => {
       data: task,
     });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
 /**  
-  @description - get task
-  @route - GET /api/tasks/:id
+  @description - get task by ID. Task ID is needed. 
+  @route - GET /api/task/:id
 */
 
 export const getTask = async (req: Request, res: Response) => {
@@ -71,7 +71,7 @@ export const getTask = async (req: Request, res: Response) => {
 
     return res.status(200).json({ status: 200, data: task });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
@@ -94,12 +94,12 @@ export const getTasks = async (req: Request, res: Response) => {
 
     return res.status(200).json({ status: 200, data: tasks });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
 /** 
-  @description - Edit task
+  @description - Edit task. Task ID is needed in the parameter and in the request body --> title, description, status, assignedTo is optional. 
   @route - PUT /api/task/:id
 */
 
@@ -138,7 +138,7 @@ export const editTask = async (req: Request, res: Response) => {
       .status(200)
       .json({ status: 200, message: "Task updated successfully", data: task });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
@@ -174,6 +174,6 @@ export const deleteTask = async (req: Request, res: Response) => {
       .status(200)
       .json({ status: 200, message: "Task deleted successfully" });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };

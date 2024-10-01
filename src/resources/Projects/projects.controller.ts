@@ -1,16 +1,22 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
-import { Project } from "../../models/models.ts";
+import catchErrorMsg from "../../Error/basicErrorMsg.ts";
+import { AuthenticatedRequest } from "../../middleware/auth.ts";
+import { Project, User } from "../../models/models.ts";
 import { IProject } from "../../types.ts";
-import generalCatchErrorMsg from "../../modules/basicErrorMsg.ts";
 
 /** 
   @description - Create a new project (Trullo board).The body must include the title during creation, while the description and members fields are optional. 
   @route - POST /api/createProject/:id 
 */
 
-export const createProject = async (req: Request, res: Response) => {
-  const id = new Types.ObjectId(req.params.id);
+export const createProject = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  if (!req.user) return null;
+
+  const id = new Types.ObjectId(req.user.id); // user id
   const body: IProject = req.body;
   const { title, members } = body;
 
@@ -39,6 +45,19 @@ export const createProject = async (req: Request, res: Response) => {
         .json({ status: 500, message: "Unable to create the project." });
     }
 
+    filteredMembersList.forEach(async (memberId) => {
+      const user = await User.findByIdAndUpdate(memberId, {
+        $push: { projects: project._id },
+      });
+
+      if (!user) {
+        return res.status(500).json({
+          status: 500,
+          message: "Unable to update projects property in user for " + memberId,
+        });
+      }
+    });
+
     return res.status(200).json({
       status: 200,
       message: "Project created successfully",
@@ -51,7 +70,7 @@ export const createProject = async (req: Request, res: Response) => {
 };
 
 /** 
-  @description - update member for project. The body must contain a property named member with a valid user ID and action property with delete or add. 
+  @description - Update a member for a project. The request body must contain a member property with a valid user ID and an action property with either the value delete or add to specify how the function should handle the member input. 
   @route - POST /api/updateMembersforProject/:id 
 */
 
@@ -81,6 +100,20 @@ export const updateMember = async (req: Request, res: Response) => {
       new: true,
     });
 
+    if (action == "add") {
+      const user = await User.findByIdAndUpdate(
+        member,
+        { $push: { projects: id } },
+        { new: true }
+      );
+
+      if (!user) {
+        return res.status(500).json({
+          message: "Unable to update member in this project: " + project?.id,
+        });
+      }
+    }
+
     if (!project) {
       return res.status(500).json({
         status: 500,
@@ -94,12 +127,12 @@ export const updateMember = async (req: Request, res: Response) => {
       data: project,
     });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
 /** 
-  @description - update project status. The body must contain a property named status with a valid status (active/inactive). 
+  @description - Update project status. The request body must contain a status property with a valid status (active or inactive), and the parameters must include the project ID.
   @route - PUT /api/updateProjectStatus/:id 
 */
 
@@ -133,17 +166,22 @@ export const updateStatus = async (req: Request, res: Response) => {
       data: project,
     });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };
 
 /** 
-  @description - Delete project. 
+  @description - Delete project. Only the owner can delete the project. The project ID must be specified in the parameters.
   @route - DELETE /api/deleteProject/:id 
 */
 
-export const deleteProject = async (req: Request, res: Response) => {
-  const { id } = req.params; // project id
+export const deleteProject = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  if (!req.user) return null;
+  const id = req.params.id; // project id
+  const userID: string = req.user.id; // user id
 
   try {
     const project = await Project.findByIdAndDelete(id);
@@ -155,17 +193,40 @@ export const deleteProject = async (req: Request, res: Response) => {
       });
     }
 
+    if (userID !== String(project.createdBy)) {
+      return res.status(401).json({
+        status: 401,
+        message:
+          "You are not authorized to delete this project. Only the owner can delete this project.",
+      });
+    }
+
+    if (project.members) {
+      project.members.forEach(async (memberId) => {
+        const user = await User.findByIdAndUpdate(memberId, {
+          $pull: { projects: memberId },
+        });
+
+        if (!user) {
+          return res.status(500).json({
+            message:
+              "Unable to update projects property in user for " + memberId,
+          });
+        }
+      });
+    }
+
     return res.status(200).json({
       status: 200,
       message: "Project deleted successfully",
     });
-  } catch (error) {
-    generalCatchErrorMsg(res, error);
+  } catch (error: unknown) {
+    catchErrorMsg(res, error);
   }
 };
 
 /** 
-  @description - Fetch specific project. Parameter must contain project id.
+  @description - Fetch a specific project. The parameter must include the project ID you wish to retrieve.
   @route - GET /api/fetchProject/:id
 */
 export const getProject = async (req: Request, res: Response) => {
@@ -195,6 +256,6 @@ export const getProject = async (req: Request, res: Response) => {
       data: project,
     });
   } catch (error) {
-    generalCatchErrorMsg(res, error);
+    catchErrorMsg(res, error);
   }
 };

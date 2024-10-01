@@ -1,6 +1,6 @@
 import express from "express";
 import { connectDB } from "./connect.ts";
-import "dotenv";
+import "dotenv/config";
 
 // routes
 import taskRouter from "./resources/Tasks/task.routes.ts";
