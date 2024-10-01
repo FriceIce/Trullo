@@ -37,14 +37,6 @@ export const createProject = async (
       members: filteredMembersList,
     });
 
-    console.log(project);
-
-    if (!project) {
-      return res
-        .status(500)
-        .json({ status: 500, message: "Unable to create the project." });
-    }
-
     filteredMembersList.forEach(async (memberId) => {
       const user = await User.findByIdAndUpdate(memberId, {
         $push: { projects: project._id },
@@ -100,6 +92,13 @@ export const updateMember = async (req: Request, res: Response) => {
       new: true,
     });
 
+    if (!project) {
+      return res.status(404).json({
+        status: 404,
+        message: "The project referenced in the parameters was not found.",
+      });
+    }
+
     if (action == "add") {
       const user = await User.findByIdAndUpdate(
         member,
@@ -154,9 +153,9 @@ export const updateStatus = async (req: Request, res: Response) => {
     );
 
     if (!project) {
-      return res.status(500).json({
-        status: 500,
-        message: "Unable to update project status.",
+      return res.status(404).json({
+        status: 404,
+        message: "The project referenced in the parameters was not found.",
       });
     }
 
@@ -187,8 +186,8 @@ export const deleteProject = async (
     const project = await Project.findByIdAndDelete(id);
 
     if (!project) {
-      return res.status(400).json({
-        status: 400,
+      return res.status(404).json({
+        status: 404,
         message: "The project referenced in the parameters was not found.",
       });
     }
@@ -244,8 +243,8 @@ export const getProject = async (req: Request, res: Response) => {
     ]);
 
     if (!project) {
-      return res.status(400).json({
-        status: 400,
+      return res.status(404).json({
+        status: 404,
         message: "The project referenced in the parameters was not found.",
       });
     }

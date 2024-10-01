@@ -29,7 +29,9 @@ export const createTask = async (req: Request, res: Response) => {
     });
 
     if (!task) {
-      return res.status(500).json({ message: "Server error" });
+      return res
+        .status(404)
+        .json({ status: 404, message: "Unable to create this task." });
     }
 
     const project = await Project.findByIdAndUpdate<IProject>(
@@ -129,8 +131,8 @@ export const editTask = async (req: Request, res: Response) => {
 
     if (!task) {
       return res.status(404).json({
-        status: 400,
-        message: "Bad request. Not valid ID in parameter.",
+        status: 404,
+        message: "The task referenced in the parameters was not found.",
       });
     }
 
@@ -148,7 +150,7 @@ export const editTask = async (req: Request, res: Response) => {
 */
 
 export const deleteTask = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const { id } = req.params; // task id
   console.log(id);
   try {
     const task = await Task.findByIdAndDelete(id);
@@ -164,9 +166,11 @@ export const deleteTask = async (req: Request, res: Response) => {
     );
 
     if (!project) {
-      return res.status(500).json({
-        status: 500,
-        message: "Something happend during deletion of task from project",
+      return res.status(404).json({
+        status: 404,
+        message:
+          "The project ID referenced to this task is not found. Project ID: " +
+          task.project,
       });
     }
 
